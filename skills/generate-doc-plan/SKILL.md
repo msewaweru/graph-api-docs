@@ -347,7 +347,11 @@ Include the standard checklist covering:
 
 After generating the plan:
 
-1. **Save** the file as `documentation-plan.md` in the `temp-docstubs/` folder of the docs repo (creating it if needed)
+1. **Save** the file using a workload-scoped path so multiple plans can coexist:
+   ```
+   temp-docstubs/{workload-name}/documentation-plan.md
+   ```
+   Where `{workload-name}` is the lowercase workload name detected in Step 1 (e.g., `temp-docstubs/defender-for-identity/documentation-plan.md`). Create the subdirectory if needed.
 2. **Print a summary** showing:
    - Total number of changes detected
    - Number of new/updated/deprecated artifacts
