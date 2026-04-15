@@ -1,0 +1,9 @@
+{
+  "name": "graph-api-docs",
+  "version": "1.0.0",
+  "description": "Generate documentation plans and review Microsoft Graph API reference documentation. Analyzes CSDL schema changes to produce documentation plans, then validates PR documentation against those plans and authoring guidelines.",
+  "author": {
+    "name": "Microsoft Graph Docs Team"
+  },
+  "keywords": ["microsoft-graph", "api-docs", "documentation-plan", "review", "csdl", "api-reference"]
+}
