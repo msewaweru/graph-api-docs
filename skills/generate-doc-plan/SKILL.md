@@ -1,13 +1,18 @@
 ---
 name: generate-doc-plan
-description: Analyzes CSDL schema changes from a remote Azure DevOps schema PR and API.md proposals to generate a structured documentation plan (documentation-plan.md) for Microsoft Graph API reference documentation. Use when preparing to author or review Graph API docs.
+description: Analyzes CSDL schema changes (from a local workloads repo or a remote Azure DevOps schema PR) and API.md proposals to generate a structured documentation plan (documentation-plan.md) for Microsoft Graph API reference documentation. Use when preparing to author or review Graph API docs.
 ---
 
 # Generate Documentation Plan
 
-Analyze CSDL schema changes from a **remote Azure DevOps schema PR** and produce a comprehensive `documentation-plan.md` that specifies all required Microsoft Graph API documentation work.
+Analyze CSDL schema changes and produce a comprehensive `documentation-plan.md` that specifies all required Microsoft Graph API documentation work.
 
-> **This skill works entirely from the docs repo.** You do not need to clone or switch to the workloads repository. Provide the schema PR link and the skill fetches everything remotely via Azure DevOps APIs.
+This skill supports **two input modes**:
+
+| Mode | When to use | What you need |
+|------|------------|---------------|
+| **Local repo** | You have the workloads repo cloned and are on a branch with CSDL changes | A terminal open in the `AD-AggregatorService-Workloads` repo |
+| **Remote PR** | You want to work entirely from the docs repo | An Azure DevOps schema PR URL |
 
 ## Progress Checklist
 
@@ -15,9 +20,9 @@ Track your progress through each step:
 
 ```
 Doc Plan Generation Progress:
-- [ ] Step 1: Collect inputs from schema PR
-- [ ] Step 2: Analyze CSDL changes from PR diff
-- [ ] Step 3: Gather API.md context from PR files
+- [ ] Step 1: Determine input mode and collect inputs
+- [ ] Step 2: Analyze CSDL changes
+- [ ] Step 3: Gather API.md context
 - [ ] Step 4: Detect special patterns (polymorphism, deprecation, inheritance)
 - [ ] Step 5: Generate documentation plan
 - [ ] Step 6: Present summary to user
@@ -25,11 +30,53 @@ Doc Plan Generation Progress:
 
 ---
 
-## Step 1: Collect Inputs from Schema PR
+## Step 1: Determine Input Mode and Collect Inputs
 
-### 1.1 Get the Schema PR Link
+Ask the user how they want to provide the CSDL schema changes:
+- **Option A:** "I have the workloads repo open locally" → go to **Step 1A**
+- **Option B:** "I have a schema PR link" → go to **Step 1B**
 
-Ask the user for the **Azure DevOps schema PR URL**. This is the pull request in the workloads repository (AD-AggregatorService-Workloads) that contains the CSDL schema changes.
+If the user's message already contains an Azure DevOps PR URL, skip straight to **Step 1B**. If the current working directory is the workloads repo (contains `Workloads/` folder), default to **Step 1A**.
+
+---
+
+### Step 1A: Local Repo Mode
+
+#### 1A.1 Confirm Working Branch
+
+Run `git branch --show-current` and verify the user is **not** on `main`, `master`, or `release`. If they are, **stop** and ask them to switch to a working branch that contains CSDL changes.
+
+#### 1A.2 Confirm CSDL Changes Exist
+
+Run `git diff --name-only HEAD~1..HEAD` (or compare against the base branch) to verify that `schema-Prod-*.csdl` files have been modified under `Workloads/*/override/`.
+
+If no CSDL changes are found, broaden the diff range:
+```
+git diff --name-only main...HEAD -- "*/schema-Prod-*.csdl"
+```
+
+#### 1A.3 Detect Workload Name
+
+Extract the workload name from the changed file paths. The pattern is `Workloads/{WorkloadName}/override/schema-Prod-*.csdl`. If multiple workloads are changed, confirm with the user which one to focus on, or generate plans for each.
+
+#### 1A.4 Check for API.md Proposals
+
+Look in the `Reviews/` folder for API.md files. These follow the pattern:
+```
+Reviews/{Organization}/{prId}-{workItemId}-{title}/API.md
+```
+
+Ask the user if they know which API.md proposal applies, or search `Reviews/` for recently modified files.
+
+**→ Continue to Step 2A**
+
+---
+
+### Step 1B: Remote PR Mode
+
+#### 1B.1 Get the Schema PR Link
+
+Ask the user for the **Azure DevOps schema PR URL** (if not already provided). This is the pull request in the workloads repository (AD-AggregatorService-Workloads) that contains the CSDL schema changes.
 
 The URL follows one of these patterns:
 ```
@@ -43,7 +90,7 @@ Parse the URL to extract:
 - **Repository name or ID** (e.g., `AD-AggregatorService-Workloads`)
 - **PR ID** (numeric)
 
-### 1.2 Fetch PR Details
+#### 1B.2 Fetch PR Details
 
 Use the ADO tools to retrieve PR metadata:
 1. Call `ado-repo_get_pull_request_by_id` with the repository ID and PR ID to get the PR title, description, source branch, target branch, and status.
@@ -54,21 +101,34 @@ From the PR metadata, extract:
 - **Target branch** — typically `main` or `master`
 - **PR description** — often contains links to API.md and context about the changes
 
-### 1.3 Identify Changed Files
+#### 1B.3 Identify Changed Files
 
 Use `ado-search_code` or browse the PR diff to find which files changed. Look specifically for:
 - `schema-Prod-*.csdl` files under `Workloads/*/override/`
 - `API.md` files under `Reviews/`
 
-### 1.4 Detect Workload Name
+#### 1B.4 Detect Workload Name
 
 Extract the workload name from the changed file paths. The pattern is `Workloads/{WorkloadName}/override/schema-Prod-*.csdl`. If multiple workloads are changed, confirm with the user which one to focus on, or generate plans for each.
 
+**→ Continue to Step 2B**
+
 ---
 
-## Step 2: Analyze CSDL Changes from PR Diff
+## Step 2: Analyze CSDL Changes
 
-### 2.1 Fetch CSDL File Contents
+### Step 2A: Local Diff (from Step 1A)
+
+Run a detailed diff on each modified `schema-Prod-*.csdl` file:
+
+```
+git diff main...HEAD -- "Workloads/{Workload}/override/schema-Prod-beta.csdl"
+git diff main...HEAD -- "Workloads/{Workload}/override/schema-Prod-v1.0.csdl"
+```
+
+**→ Continue to "Parse CSDL Changes" below**
+
+### Step 2B: Remote Diff (from Step 1B)
 
 For each modified `schema-Prod-*.csdl` file found in the PR:
 
@@ -78,7 +138,9 @@ For each modified `schema-Prod-*.csdl` file found in the PR:
 
 Alternatively, if the PR diff is available through PR threads or comments, use that directly.
 
-### 2.2 Parse CSDL Changes
+**→ Continue to "Parse CSDL Changes" below**
+
+### Parse CSDL Changes
 
 Parse the diff output to identify changes in these artifact types:
 
@@ -114,9 +176,34 @@ Also check for `ags:Default="true"` on properties (indicates returned by default
 
 ## Step 3: Gather API.md Context
 
-Fetch API.md files from the schema PR's source branch. These are typically at `Reviews/{Organization}/{prId}-{workItemId}-{title}/API.md`. Use `ado-repo_list_directory` on the source branch to locate them, then fetch their content.
+The API.md proposal can come from the same source as the CSDL changes (local or remote), or the user may provide a direct link. Ask the user if they have an API.md link, or locate it automatically based on the input mode.
 
-If the user also provides a direct link to the API.md file, fetch it directly.
+### Step 3A: Local API.md (from Step 1A)
+
+Search the `Reviews/` folder in the local workloads repo for API.md files:
+```
+Reviews/{Organization}/{prId}-{workItemId}-{title}/API.md
+```
+
+Ask the user if they know which API.md proposal applies, or search `Reviews/` for recently modified files:
+```
+find Reviews/ -name "API.md" -newer $(git log -1 --format=%ci main) 2>/dev/null
+```
+
+### Step 3B: Remote API.md (from Step 1B)
+
+Fetch API.md files from the schema PR's source branch. These are typically at `Reviews/{Organization}/{prId}-{workItemId}-{title}/API.md`. Use `ado-repo_list_directory` on the source branch to locate them, then fetch their content using the ADO repository file content APIs.
+
+### Step 3C: Direct Link
+
+If the user provides a direct URL to the API.md file (Azure DevOps file link), fetch it directly. The URL typically follows:
+```
+https://dev.azure.com/{org}/{project}/_git/{repo}?path=/Reviews/{path}/API.md&version=GB{branch}
+```
+
+Parse the URL and use `ado-repo_list_directory` or the ADO file content APIs to retrieve the file.
+
+### Extract from API.md
 
 From the API.md proposals, extract:
 
