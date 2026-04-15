@@ -1,11 +1,13 @@
 ---
 name: generate-doc-plan
-description: Analyzes CSDL schema changes and API.md proposals to generate a structured documentation plan (documentation-plan.md) for Microsoft Graph API reference documentation. Use when preparing to author or review Graph API docs.
+description: Analyzes CSDL schema changes from a remote Azure DevOps schema PR and API.md proposals to generate a structured documentation plan (documentation-plan.md) for Microsoft Graph API reference documentation. Use when preparing to author or review Graph API docs.
 ---
 
 # Generate Documentation Plan
 
-Analyze CSDL schema changes in a workload branch and produce a comprehensive `documentation-plan.md` that specifies all required Microsoft Graph API documentation work.
+Analyze CSDL schema changes from a **remote Azure DevOps schema PR** and produce a comprehensive `documentation-plan.md` that specifies all required Microsoft Graph API documentation work.
+
+> **This skill works entirely from the docs repo.** You do not need to clone or switch to the workloads repository. Provide the schema PR link and the skill fetches everything remotely via Azure DevOps APIs.
 
 ## Progress Checklist
 
@@ -13,9 +15,9 @@ Track your progress through each step:
 
 ```
 Doc Plan Generation Progress:
-- [ ] Step 1: Validate branch and collect inputs
-- [ ] Step 2: Analyze CSDL changes
-- [ ] Step 3: Gather API.md context
+- [ ] Step 1: Collect inputs from schema PR
+- [ ] Step 2: Analyze CSDL changes from PR diff
+- [ ] Step 3: Gather API.md context from PR files
 - [ ] Step 4: Detect special patterns (polymorphism, deprecation, inheritance)
 - [ ] Step 5: Generate documentation plan
 - [ ] Step 6: Present summary to user
@@ -23,44 +25,60 @@ Doc Plan Generation Progress:
 
 ---
 
-## Step 1: Validate Branch and Collect Inputs
+## Step 1: Collect Inputs from Schema PR
 
-### 1.1 Confirm Working Branch
+### 1.1 Get the Schema PR Link
 
-Run `git branch --show-current` and verify the user is **not** on `main`, `master`, or `release`. If they are, **stop** and ask them to switch to a working branch that contains CSDL changes.
+Ask the user for the **Azure DevOps schema PR URL**. This is the pull request in the workloads repository (AD-AggregatorService-Workloads) that contains the CSDL schema changes.
 
-### 1.2 Confirm CSDL Changes Exist
-
-Run `git diff --name-only HEAD~1..HEAD` (or compare against the base branch) to verify that `schema-Prod-*.csdl` files have been modified under `Workloads/*/override/`.
-
-If no CSDL changes are found, broaden the diff range:
+The URL follows one of these patterns:
 ```
-git diff --name-only main...HEAD -- "*/schema-Prod-*.csdl"
+https://dev.azure.com/{org}/{project}/_git/{repo}/pullrequest/{prId}
+https://dev.azure.com/{org}/{project}/_apis/git/repositories/{repo}/pullRequests/{prId}
 ```
 
-### 1.3 Detect Workload Name
+Parse the URL to extract:
+- **Organization** (e.g., `msazure`)
+- **Project** (e.g., `One`)
+- **Repository name or ID** (e.g., `AD-AggregatorService-Workloads`)
+- **PR ID** (numeric)
+
+### 1.2 Fetch PR Details
+
+Use the ADO tools to retrieve PR metadata:
+1. Call `ado-repo_get_pull_request_by_id` with the repository ID and PR ID to get the PR title, description, source branch, target branch, and status.
+2. Call `ado-repo_list_pull_request_threads` to check for any reviewer comments or context about the changes.
+
+From the PR metadata, extract:
+- **Source branch name** — this is the working branch with CSDL changes
+- **Target branch** — typically `main` or `master`
+- **PR description** — often contains links to API.md and context about the changes
+
+### 1.3 Identify Changed Files
+
+Use `ado-search_code` or browse the PR diff to find which files changed. Look specifically for:
+- `schema-Prod-*.csdl` files under `Workloads/*/override/`
+- `API.md` files under `Reviews/`
+
+### 1.4 Detect Workload Name
 
 Extract the workload name from the changed file paths. The pattern is `Workloads/{WorkloadName}/override/schema-Prod-*.csdl`. If multiple workloads are changed, confirm with the user which one to focus on, or generate plans for each.
 
-### 1.4 Check for API.md Proposals
-
-Look in the `Reviews/` folder for API.md files. These follow the pattern:
-```
-Reviews/{Organization}/{prId}-{workItemId}-{title}/API.md
-```
-
-Ask the user if they know which API.md proposal applies, or search `Reviews/` for recently modified files.
-
 ---
 
-## Step 2: Analyze CSDL Changes
+## Step 2: Analyze CSDL Changes from PR Diff
 
-Run a detailed diff on each modified `schema-Prod-*.csdl` file:
+### 2.1 Fetch CSDL File Contents
 
-```
-git diff main...HEAD -- "Workloads/{Workload}/override/schema-Prod-beta.csdl"
-git diff main...HEAD -- "Workloads/{Workload}/override/schema-Prod-v1.0.csdl"
-```
+For each modified `schema-Prod-*.csdl` file found in the PR:
+
+1. **Get the source branch version** — Use `ado-repo_list_directory` with the source branch to locate the CSDL files, then fetch their content using the ADO repository file content APIs.
+2. **Get the target branch version** — Fetch the same file from the target branch (typically `main`) for comparison.
+3. **Diff the two versions** — Compare the source and target versions to identify what changed.
+
+Alternatively, if the PR diff is available through PR threads or comments, use that directly.
+
+### 2.2 Parse CSDL Changes
 
 Parse the diff output to identify changes in these artifact types:
 
@@ -96,7 +114,11 @@ Also check for `ags:Default="true"` on properties (indicates returned by default
 
 ## Step 3: Gather API.md Context
 
-If API.md proposals exist, read them to extract:
+Fetch API.md files from the schema PR's source branch. These are typically at `Reviews/{Organization}/{prId}-{workItemId}-{title}/API.md`. Use `ado-repo_list_directory` on the source branch to locate them, then fetch their content.
+
+If the user also provides a direct link to the API.md file, fetch it directly.
+
+From the API.md proposals, extract:
 
 - **Scenarios and use cases** — What problems the API solves
 - **Supported operations** — GET, POST, PATCH, PUT, DELETE with endpoint paths
@@ -238,7 +260,7 @@ Include the standard checklist covering:
 
 After generating the plan:
 
-1. **Save** the file as `documentation-plan.md` in the current working directory
+1. **Save** the file as `documentation-plan.md` in the `temp-docstubs/` folder of the docs repo (creating it if needed)
 2. **Print a summary** showing:
    - Total number of changes detected
    - Number of new/updated/deprecated artifacts
