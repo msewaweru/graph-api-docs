@@ -226,6 +226,68 @@ For each finding:
 
 ---
 
+## Step 7: Post Comments to PR (GitHub PR mode only)
+
+> **This step only applies when reviewing a GitHub PR (Option 1 from Step 1).** For local branch reviews, Step 6 is the final step.
+
+After presenting the report in Step 6, offer to post review comments directly to the PR.
+
+### 7.1 Prepare Comments
+
+Organize findings into two categories:
+
+**Inline comments** — file-specific findings that reference a particular file and line/section:
+- Map each finding to the specific file path and line number in the PR diff
+- Format as a concise review comment: issue + exact fix + rule reference
+- Group multiple findings on the same file together
+
+**Global comment** — a single top-level PR comment summarizing the overall review:
+- Gate decision (✅ / ⚠️ / ❌)
+- Summary table of issues by severity
+- List of files reviewed
+- Any cross-file or structural issues that don't belong on a specific line
+
+### 7.2 Preview Comments with User
+
+**Do not post comments without user approval.** Present all prepared comments for review:
+
+```
+📝 Ready to post review comments to PR #{number}:
+
+── Global Comment ──
+{formatted global comment preview}
+
+── Inline Comments ({count}) ──
+📄 {file-path}:{line} — {short issue description}
+   {comment preview}
+
+📄 {file-path}:{line} — {short issue description}
+   {comment preview}
+
+...
+
+Would you like to:
+1. Post all comments
+2. Edit or remove specific comments before posting
+3. Skip posting — keep the report in chat only
+```
+
+If the user chooses to edit, let them specify which comments to modify or remove, then re-preview.
+
+### 7.3 Post Comments
+
+Once the user approves:
+
+1. **Post inline comments** — Use `github-mcp-server-pull_request_read` with method `get_files` to get the diff positions, then post review comments using the GitHub API. For each inline finding, create a review comment on the relevant file and line.
+
+2. **Post the global comment** — Use `github-mcp-server-pull_request_read` to verify the PR is still open, then post the summary as a PR comment.
+
+3. **Confirm** — Report back how many comments were posted successfully.
+
+> **Tip:** If the user wants to approve or request changes on the PR itself, use `github-mcp-server-pull_request_read` method `get_reviews` to check existing reviews, then ask if they want to submit the review with a formal approval/request-changes vote.
+
+---
+
 ## Top 13 Review Rules (Quick Reference)
 
 Check these first for every file:
@@ -250,7 +312,7 @@ Check these first for every file:
 
 ```
 Review Progress:
-- [ ] Step 1: Identify review target (PR/branch/workspace)
+- [ ] Step 1: Identify review target (PR or local branch)
 - [ ] Step 2: Collect context (Documentation Plan, API.md)
 - [ ] Step 3: Gather and classify changed files
 - [ ] Step 4A: Traceability map
@@ -260,6 +322,7 @@ Review Progress:
 - [ ] Step 4E: Cross-file consistency
 - [ ] Step 5: Run validation scripts
 - [ ] Step 6: Generate review report
+- [ ] Step 7: Post comments to PR (if PR mode)
 ```
 
 ---
